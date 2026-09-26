@@ -1,0 +1,1 @@
+ALTER TABLE `tournaments` ADD `viewer_screen` text DEFAULT 'pairings' NOT NULL;

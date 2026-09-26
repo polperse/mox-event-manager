@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import type { TournamentState } from "../db/tournament";
 import { FramePanel, LoadingScreen, WallClock, formatTime, toggleFullscreen, useStageScale, useTournamentState } from "./components/lcars";
+import { StandingsBoard } from "./components/standings-board";
 
 type ViewerSound = "pairings" | "result" | "five-minute" | "timeout";
 type ViewerEffect = ViewerSound | null;
@@ -81,7 +82,11 @@ export default function DisplayPage() {
               </FramePanel>
             </div>
 
-            <FramePanel title={`Emparejamientos · Ronda ${String(tournament.currentRound).padStart(2, "0")}`} refText={`${String(matches.length).padStart(2, "0")} Mesas`} tone="structure" className="pairings-frame">
+            {tournament.viewerScreen === "standings" ? (
+              <FramePanel title={`Standings · Hasta ronda ${String(state.standingsRound).padStart(2, "0")}`} refText={state.standingsStatus === "final" ? "Final" : state.standingsStatus === "complete" ? "Ronda completa" : "Provisional"} tone={state.standingsStatus === "final" ? "live" : "structure"} className="public-standings-frame">
+                {state.standingsRound ? <StandingsBoard standings={state.standings} /> : <div className="empty-state">ESPERANDO LA PRIMERA RONDA</div>}
+              </FramePanel>
+            ) : <FramePanel title={`Emparejamientos · Ronda ${String(tournament.currentRound).padStart(2, "0")}`} refText={`${String(matches.length).padStart(2, "0")} Mesas`} tone="structure" className="pairings-frame">
               <div className={`public-tables table-count-${matches.length}`}>
                 {matches.length ? matches.map((match) => (
                   <article className={`public-table ${match.result !== "—" ? "table-done" : ""} ${viewerEffects.highlightedMatches.includes(match.id) ? "table-new-result" : ""}`} key={match.id}>
@@ -94,7 +99,7 @@ export default function DisplayPage() {
                   </article>
                 )) : <div className="empty-state">ESPERANDO PUBLICACIÓN DE EMPAREJAMIENTOS</div>}
               </div>
-            </FramePanel>
+            </FramePanel>}
           </div>
 
           <footer className="bottom-arm public-bottom-arm">

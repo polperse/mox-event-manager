@@ -18,6 +18,7 @@ export const tournaments = sqliteTable("tournaments", {
   noticeVisible: integer("notice_visible", { mode: "boolean" }).notNull().default(false),
   ambientMotion: integer("ambient_motion", { mode: "boolean" }).notNull().default(false),
   soundEffects: integer("sound_effects", { mode: "boolean" }).notNull().default(true),
+  viewerScreen: text("viewer_screen").notNull().default("pairings"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("tournaments_status_idx").on(table.status)]);

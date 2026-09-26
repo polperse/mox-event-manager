@@ -32,6 +32,18 @@ export type StandingRecord = {
   byes: number;
 };
 
+export type StandingsStatus = "provisional" | "complete" | "final";
+
+export type StandingsSnapshot = {
+  tournament: { id: string; name: string; status: string; totalRounds: number };
+  roundNumber: number;
+  rounds: number[];
+  status: StandingsStatus;
+  completedMatches: number;
+  totalMatches: number;
+  standings: StandingRecord[];
+};
+
 export type SuggestedPairing = {
   playerAName: string;
   playerBName: string;
@@ -67,9 +79,12 @@ export type TournamentState = {
     noticeVisible: boolean;
     ambientMotion: boolean;
     soundEffects: boolean;
+    viewerScreen: "pairings" | "standings";
   };
   players: PlayerRecord[];
   standings: StandingRecord[];
+  standingsRound: number;
+  standingsStatus: StandingsStatus;
   suggestedPairings: SuggestedPairing[];
   matches: MatchRecord[];
   rounds: Array<{ id: string; number: number; status: string; closedAt: string | null }>;
@@ -94,6 +109,7 @@ type TournamentRow = {
   notice_visible: number;
   ambient_motion: number;
   sound_effects: number;
+  viewer_screen: string;
   updated_at: string;
 };
 
@@ -115,8 +131,13 @@ type TournamentLimits = {
 type HistoricalMatchRow = {
   player_a_id: string | null;
   player_b_id: string | null;
+  player_a_name: string;
+  player_b_name: string;
+  round_number: number;
   result: string;
 };
+
+type PlayerRow = { id: string; name: string; active: number; sort_order: number };
 
 type StandingAccumulator = StandingRecord & {
   active: boolean;
@@ -144,7 +165,7 @@ export async function getTournamentState(requestedTournamentId?: string | null):
     db.prepare("SELECT id, number, status, closed_at FROM rounds WHERE tournament_id = ? ORDER BY number").bind(selected.id).all(),
     db.prepare("SELECT id, name, game, format, status, updated_at FROM tournaments ORDER BY updated_at DESC").all(),
     db.prepare("SELECT id, action, details, actor, created_at FROM audit_log WHERE tournament_id = ? ORDER BY created_at DESC LIMIT 12").bind(selected.id).all(),
-    db.prepare(`SELECT m.player_a_id, m.player_b_id, m.result
+    db.prepare(`SELECT m.player_a_id, m.player_b_id, m.player_a_name, m.player_b_name, m.result, r.number AS round_number
       FROM matches m INNER JOIN rounds r ON r.id = m.round_id
       WHERE r.tournament_id = ? ORDER BY r.number, m.table_number`).bind(selected.id).all(),
   ]);
@@ -156,10 +177,13 @@ export async function getTournamentState(requestedTournamentId?: string | null):
 
   const remaining = calculateRemaining(selected);
   const effectiveRunning = Boolean(selected.timer_running) && remaining > 0;
-  const playerRows = playersResult.results as Array<{ id: string; name: string; active: number; sort_order: number }>;
+  const playerRows = playersResult.results as PlayerRow[];
+  const rounds = roundsResult.results as Array<{ id: string; number: number; status: string; closed_at: string | null }>;
+  const history = historyResult.results as HistoricalMatchRow[];
+  const standingsRound = rounds.at(-1)?.number ?? 0;
   const { standings, suggestedPairings } = calculateStandingsAndPairings(
     playerRows,
-    historyResult.results as HistoricalMatchRow[],
+    history,
   );
 
   return {
@@ -181,11 +205,14 @@ export async function getTournamentState(requestedTournamentId?: string | null):
       noticeVisible: Boolean(selected.notice_visible),
       ambientMotion: Boolean(selected.ambient_motion),
       soundEffects: Boolean(selected.sound_effects),
+      viewerScreen: selected.viewer_screen === "standings" ? "standings" : "pairings",
     },
     players: playerRows.map((player) => ({
       id: player.id, name: player.name, active: Boolean(player.active), sortOrder: player.sort_order,
     })),
     standings,
+    standingsRound,
+    standingsStatus: getStandingsStatus(standingsRound, selected.total_rounds, rounds.length, history),
     suggestedPairings,
     matches: (matchesResult.results as Array<Record<string, unknown>>).map((match) => ({
       id: String(match.id),
@@ -197,7 +224,7 @@ export async function getTournamentState(requestedTournamentId?: string | null):
       result: String(match.result),
       status: String(match.status),
     })),
-    rounds: (roundsResult.results as Array<{ id: string; number: number; status: string; closed_at: string | null }>).map((round) => ({
+    rounds: rounds.map((round) => ({
       id: round.id, number: round.number, status: round.status, closedAt: round.closed_at,
     })),
     tournaments: (tournamentsResult.results as Array<{ id: string; name: string; game: string; format: string; status: string; updated_at: string }>).map((item) => ({
@@ -207,6 +234,43 @@ export async function getTournamentState(requestedTournamentId?: string | null):
       id: item.id, action: item.action, details: item.details, actor: item.actor, createdAt: item.created_at,
     })),
   };
+}
+
+export async function getStandingsSnapshot(tournamentId: string, requestedRound?: number): Promise<StandingsSnapshot> {
+  await ensureDatabase();
+  const db = await getD1();
+  const tournament = await db.prepare("SELECT id, name, status, total_rounds FROM tournaments WHERE id = ?")
+    .bind(tournamentId).first<{ id: string; name: string; status: string; total_rounds: number }>();
+  if (!tournament) throw new Error("El evento seleccionado ya no existe.");
+
+  const [playersResult, roundsResult, matchesResult] = await Promise.all([
+    db.prepare("SELECT id, name, active, sort_order FROM players WHERE tournament_id = ? ORDER BY sort_order, name").bind(tournamentId).all(),
+    db.prepare("SELECT number FROM rounds WHERE tournament_id = ? ORDER BY number").bind(tournamentId).all(),
+    db.prepare(`SELECT m.player_a_id, m.player_b_id, m.player_a_name, m.player_b_name, m.result, r.number AS round_number
+      FROM matches m INNER JOIN rounds r ON r.id = m.round_id
+      WHERE r.tournament_id = ? ORDER BY r.number, m.table_number`).bind(tournamentId).all(),
+  ]);
+  const rounds = (roundsResult.results as Array<{ number: number }>).map((round) => round.number);
+  const roundNumber = requestedRound ?? rounds.at(-1) ?? 0;
+  if (requestedRound !== undefined && !rounds.includes(requestedRound)) {
+    throw new Error("Esa ronda todavía no tiene pairings publicados.");
+  }
+  const matches = (matchesResult.results as HistoricalMatchRow[]).filter((match) => match.round_number <= roundNumber);
+  const { standings } = calculateStandingsAndPairings(playersResult.results as PlayerRow[], matches, requestedRound === undefined);
+  return {
+    tournament: { id: tournament.id, name: tournament.name, status: tournament.status, totalRounds: tournament.total_rounds },
+    roundNumber,
+    rounds,
+    status: getStandingsStatus(roundNumber, tournament.total_rounds, rounds.length, matches),
+    completedMatches: matches.filter((match) => match.result !== "—").length,
+    totalMatches: matches.length,
+    standings,
+  };
+}
+
+function getStandingsStatus(roundNumber: number, totalRounds: number, publishedRounds: number, matches: HistoricalMatchRow[]): StandingsStatus {
+  if (!matches.length || matches.some((match) => match.result === "—")) return "provisional";
+  return roundNumber === totalRounds && publishedRounds === totalRounds ? "final" : "complete";
 }
 
 export async function executeAdminAction(action: string, payload: Record<string, unknown>, actor: string) {
@@ -409,6 +473,13 @@ export async function executeAdminAction(action: string, payload: Record<string,
     const result = await db.prepare("UPDATE tournaments SET notice = ?, notice_visible = ?, updated_at = ? WHERE id = ?")
       .bind(notice, visible, now, tournamentId).run();
     assertChanged(result, "No se pudo actualizar el mensaje público.");
+  } else if (action === "set_viewer_screen") {
+    if (tournament.status !== "active") throw new Error("Solo podés cambiar el visor del evento activo.");
+    const screen = payload.screen;
+    if (screen !== "pairings" && screen !== "standings") throw new Error("La pantalla seleccionada no es válida.");
+    const result = await db.prepare("UPDATE tournaments SET viewer_screen = ?, updated_at = ? WHERE id = ?")
+      .bind(screen, now, tournamentId).run();
+    assertChanged(result, "No se pudo cambiar la pantalla del visor.");
   } else if (action === "select_round") {
     const roundNumber = requireInteger(payload.roundNumber, 1, tournament.total_rounds, "La ronda indicada no es válida.");
     const exists = await db.prepare("SELECT id FROM rounds WHERE tournament_id = ? AND number = ?").bind(tournamentId, roundNumber).first();
@@ -464,10 +535,13 @@ function calculateRemaining(row: TournamentRow) {
 }
 
 function calculateStandingsAndPairings(
-  players: Array<{ id: string; name: string; active: number; sort_order: number }>,
+  players: PlayerRow[],
   matches: HistoricalMatchRow[],
+  includeUnpairedActive = true,
 ) {
   const standingsById = new Map<string, StandingAccumulator>();
+  const participants = new Set<string>();
+  const registeredIds = new Set(players.map((player) => player.id));
   players.forEach((player) => standingsById.set(player.id, {
     playerId: player.id,
     name: player.name,
@@ -490,6 +564,22 @@ function calculateStandingsAndPairings(
   }));
 
   matches.forEach((match) => {
+    for (const [id, name] of [[match.player_a_id, match.player_a_name], [match.player_b_id, match.player_b_name]] as const) {
+      if (!id) continue;
+      participants.add(id);
+      const player = standingsById.get(id);
+      if (!player) {
+        // Matches keep player IDs and names even when a player was deleted later.
+        standingsById.set(id, {
+          playerId: id, name, active: false, sortOrder: standingsById.size,
+          matchPoints: 0, opponentMatchPoints: 0, opponentMatchWinPercentage: 0,
+          gameWinPercentage: 0, opponentGameWinPercentage: 0, wins: 0, draws: 0, losses: 0,
+          matchesPlayed: 0, gamesWon: 0, gamesLost: 0, gameDifferential: 0, byes: 0, opponents: [],
+        });
+      } else if (!registeredIds.has(id)) {
+        player.name = name;
+      }
+    }
     const playerA = match.player_a_id ? standingsById.get(match.player_a_id) : undefined;
     const playerB = match.player_b_id ? standingsById.get(match.player_b_id) : undefined;
     if (match.result === "—") return;
@@ -556,7 +646,7 @@ function calculateStandingsAndPairings(
   });
 
   const ranked = Array.from(standingsById.values())
-    .filter((standing) => standing.active)
+    .filter((standing) => participants.has(standing.playerId) || (includeUnpairedActive && standing.active))
     .sort((left, right) =>
       right.matchPoints - left.matchPoints
       || right.opponentMatchWinPercentage - left.opponentMatchWinPercentage
@@ -582,7 +672,7 @@ function calculateStandingsAndPairings(
     byes: standing.byes,
   }));
 
-  return { standings, suggestedPairings: pairRankedPlayers(ranked) };
+  return { standings, suggestedPairings: pairRankedPlayers(ranked.filter((standing) => standing.active)) };
 }
 
 function winPercentage(points: number, possiblePoints: number) {

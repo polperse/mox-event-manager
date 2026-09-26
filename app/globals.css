@@ -292,6 +292,26 @@ button.finger:hover { background: var(--text); }
 .public-table.table-done .public-table-players strong, .public-table.table-done .public-table-players span { color: var(--context); }
 .empty-state { color: var(--context); display: flex; align-items: center; justify-content: center; min-height: 120px; font-size: 22px; letter-spacing: .1em; }
 
+.public-standings-frame .frame-panel-body { left: 72px; right: 26px; top: 55px; bottom: 18px; }
+.standings-list { min-height: 0; flex: 1; overflow-y: auto; padding-right: 5px; }
+.public-standings-frame .standings-list { height: 100%; }
+.public-standings-frame .standings-table { border-spacing: 0 2px; }
+.public-standings-frame .standings-table tbody tr { height: 34px; }
+.standings-table { width: 100%; border-collapse: separate; border-spacing: 0 4px; table-layout: fixed; text-align: right; font-size: 18px; letter-spacing: .045em; }
+.standings-table thead th { position: sticky; top: 0; z-index: 1; background: var(--bg); color: var(--context); font-size: 17px; font-weight: 600; height: 37px; }
+.standings-table th:first-child, .standings-table td:first-child { width: 65px; }
+.standings-table th:nth-child(2) { text-align: left; }
+.standings-table th:nth-child(3), .standings-table td:nth-child(3) { width: 140px; }
+.standings-table th:nth-child(4), .standings-table td:nth-child(4) { width: 86px; }
+.standings-table th:nth-child(n+5), .standings-table td:nth-child(n+5) { width: 130px; }
+.standings-table tbody tr { height: 38px; }
+.standings-table tbody td, .standings-table tbody th { border-bottom: 3px solid var(--structure); font-weight: 400; padding: 0 14px; }
+.standings-table tbody tr:first-child td, .standings-table tbody tr:first-child th { border-bottom-color: var(--active); }
+.standings-table .standings-rank { background: var(--structure); color: var(--bg); text-align: center; border-radius: 14px 0 0 14px; font-weight: 700; border: 0; padding: 0; }
+.standings-table tbody tr:first-child .standings-rank { background: var(--active); }
+.standings-table .standings-name { text-align: left; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 20px; }
+.standings-table .standings-points { color: var(--active); font-weight: 700; font-size: 22px; }
+
 .public-bottom-arm .bottom-message { flex: 1; min-width: 0; gap: 26px; overflow: hidden; }
 .bottom-message b { color: var(--bg); font-size: 17px; }
 .bottom-message span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 20px; }
@@ -448,6 +468,22 @@ button.finger:hover { background: var(--text); }
 .event-history-row button:disabled { cursor: not-allowed; }
 .event-select.current-event:disabled { opacity: 1; cursor: default; }
 .new-event { margin-top: 24px; border-top: 8px solid var(--context); padding-top: 18px; }
+
+/* STANDINGS CONSOLE */
+.standings-layout { height: 100%; display: flex; flex-direction: column; gap: 12px; }
+.standings-toolbar { display: grid; grid-template-columns: minmax(250px, 1.2fr) minmax(240px, .8fr) minmax(365px, 1.1fr); gap: 16px; border-bottom: 8px solid var(--structure); padding-bottom: 13px; }
+.standings-toolbar label { display: flex; flex-direction: column; gap: 6px; color: var(--context); font-size: 16px; letter-spacing: .08em; }
+.standings-toolbar select { width: 100%; min-height: 45px; border: 3px solid var(--context); background: var(--bg); color: var(--text); padding: 0 10px; font-size: 17px; }
+.standings-viewer-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.standings-viewer-actions span { grid-column: 1 / -1; color: var(--context); font-size: 16px; letter-spacing: .08em; }
+.standings-viewer-actions button { min-height: 45px; border: 0; background: var(--action); color: var(--bg); font-size: 16px; font-weight: 700; }
+.standings-viewer-actions button.selected { background: var(--active); }
+.standings-viewer-actions button:disabled { opacity: .55; cursor: not-allowed; }
+.standings-viewer-actions button.selected:disabled { opacity: 1; }
+.standings-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 19px; letter-spacing: .055em; }
+.standings-summary b { color: var(--structure); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.standings-summary span { color: var(--active); white-space: nowrap; }
+.standings-legend { display: flex; justify-content: space-between; border-top: 5px solid var(--context); padding-top: 9px; color: var(--context); font-size: 16px; letter-spacing: .08em; }
 
 .system-loader { width: 760px; min-height: 220px; border-left: 70px solid var(--active); border-top: 54px solid var(--active); border-radius: 42px 0 0 0; padding: 28px 36px; display: flex; flex-direction: column; justify-content: center; color: var(--text); }
 .system-loader strong { color: var(--active); font-size: 38px; letter-spacing: .08em; }

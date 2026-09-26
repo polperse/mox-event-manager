@@ -29,6 +29,7 @@ export async function ensureDatabase() {
       notice_visible INTEGER NOT NULL DEFAULT 0,
       ambient_motion INTEGER NOT NULL DEFAULT 0,
       sound_effects INTEGER NOT NULL DEFAULT 1,
+      viewer_screen TEXT NOT NULL DEFAULT 'pairings',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
@@ -86,6 +87,9 @@ export async function ensureDatabase() {
   }
   if (!columnNames.has("sound_effects")) {
     upgrades.push(db.prepare("ALTER TABLE tournaments ADD COLUMN sound_effects INTEGER NOT NULL DEFAULT 1"));
+  }
+  if (!columnNames.has("viewer_screen")) {
+    upgrades.push(db.prepare("ALTER TABLE tournaments ADD COLUMN viewer_screen TEXT NOT NULL DEFAULT 'pairings'"));
   }
   if (upgrades.length) await db.batch(upgrades);
 

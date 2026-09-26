@@ -31,6 +31,14 @@ async function getState() {
   return readJson(response);
 }
 
+async function getStandings(tournamentId, round, expectedStatus = 200) {
+  const query = new URLSearchParams({ tournamentId });
+  if (round !== undefined) query.set("round", String(round));
+  const response = await request(`/api/standings?${query}`);
+  assert.equal(response.status, expectedStatus);
+  return readJson(response);
+}
+
 async function admin(action, payload, expectedStatus = 200) {
   const response = await request("/api/admin", {
     method: "POST",
@@ -276,6 +284,78 @@ test("1-0 and 0-1 score as full Swiss matches and pair by match points", async (
   assert.equal(standingsByName.get("C").wins, 2);
   assert.equal(standingsByName.get("C").gameDifferential, 3);
   assert.equal(standingsByName.get("C").gameWinPercentage, 1);
+});
+
+test("standings by round remain readable for archived events and removed players without changing the public event", async () => {
+  let state = await admin("create_tournament", {
+    name: "Copa LCARS", game: "TCG", format: "Suizo", totalRounds: 2, roundDuration: 3000,
+  });
+  const tournamentId = state.tournament.id;
+  for (const name of ["Uno", "Dos", "Tres", "Cuatro"]) {
+    state = await admin("add_player", { tournamentId, name });
+  }
+  let snapshot = await getStandings(tournamentId);
+  assert.equal(snapshot.roundNumber, 0);
+  assert.equal(snapshot.status, "provisional");
+  assert.equal(snapshot.standings.length, 4);
+  state = await admin("save_pairings", { tournamentId, roundNumber: 1, pairs: state.suggestedPairings });
+  state = await admin("record_result", { tournamentId, matchId: state.matches[0].id, result: "1 · 0" });
+  snapshot = await getStandings(tournamentId);
+  assert.equal(snapshot.status, "provisional");
+  assert.equal(snapshot.completedMatches, 1);
+  assert.equal(snapshot.totalMatches, 2);
+  state = await admin("record_result", { tournamentId, matchId: state.matches[1].id, result: "0 · 1" });
+  snapshot = await getStandings(tournamentId, 1);
+  assert.equal(snapshot.status, "complete");
+  assert.deepEqual(snapshot.standings.map((player) => [player.name, player.matchPoints]), [
+    ["Uno", 3], ["Cuatro", 3], ["Dos", 0], ["Tres", 0],
+  ]);
+
+  state = await admin("set_viewer_screen", { tournamentId, screen: "standings" });
+  assert.equal(state.tournament.viewerScreen, "standings");
+  assert.equal(state.standingsRound, 1);
+  assert.equal(state.standingsStatus, "complete");
+  const invalidScreen = await admin("set_viewer_screen", { tournamentId, screen: "results" }, 400);
+  assert.match(invalidScreen.error, /no es válida/i);
+  state = await admin("save_pairings", { tournamentId, roundNumber: 2, pairs: state.suggestedPairings });
+  state = await admin("record_result", { tournamentId, matchId: state.matches[0].id, result: "2 · 0" });
+  assert.equal((await getStandings(tournamentId)).status, "provisional");
+  state = await admin("record_result", { tournamentId, matchId: state.matches[1].id, result: "1 · 1" });
+  snapshot = await getStandings(tournamentId);
+  assert.equal(snapshot.status, "final");
+  assert.equal(snapshot.roundNumber, 2);
+  assert.deepEqual(snapshot.rounds, [1, 2]);
+  assert.equal(snapshot.standings.find((player) => player.name === "Uno")?.matchPoints, 6);
+
+  const firstRound = await getStandings(tournamentId, 1);
+  assert.equal(firstRound.standings.find((player) => player.name === "Uno")?.matchPoints, 3);
+  assert.equal(firstRound.status, "complete");
+  assert.equal((await getState()).tournament.currentRound, 2, "reading previous rounds must not change the public round");
+  state = await admin("select_round", { tournamentId, roundNumber: 1 });
+  assert.equal(state.standingsRound, 2, "the public board always shows the latest cumulative standings");
+  assert.equal(state.standingsStatus, "final");
+  state = await admin("select_round", { tournamentId, roundNumber: 2 });
+  const missingRound = await getStandings(tournamentId, 3, 400);
+  assert.match(missingRound.error, /todavía no tiene pairings/i);
+
+  const firstPlayer = state.players.find((player) => player.name === "Uno");
+  const secondPlayer = state.players.find((player) => player.name === "Dos");
+  state = await admin("toggle_player", { tournamentId, playerId: firstPlayer.id, active: false });
+  state = await admin("delete_player", { tournamentId, playerId: secondPlayer.id });
+  snapshot = await getStandings(tournamentId);
+  assert.equal(snapshot.standings.find((player) => player.name === "Uno")?.matchPoints, 6);
+  assert.equal(snapshot.standings.find((player) => player.name === "Dos")?.matchPoints, 1);
+  assert.equal(snapshot.standings.length, 4);
+  assert.equal(state.standings.length, 4, "public standings must also retain historic participants");
+
+  state = await admin("create_tournament", { name: "Otro evento", totalRounds: 2 });
+  assert.equal(state.tournament.viewerScreen, "pairings");
+  const archived = await getStandings(tournamentId, 2);
+  assert.equal(archived.tournament.status, "archived");
+  assert.equal(archived.status, "final");
+  assert.equal((await getState()).tournament.id, state.tournament.id, "consulting archived standings must not activate an event");
+  const archivedScreen = await admin("set_viewer_screen", { tournamentId, screen: "pairings" }, 400);
+  assert.match(archivedScreen.error, /evento activo/i);
 });
 
 test("admin endpoint always returns a JSON error for malformed input", async () => {

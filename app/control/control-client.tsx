@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
-import type { PlayerRecord, TournamentState } from "../../db/tournament";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import type { PlayerRecord, StandingsSnapshot, TournamentState } from "../../db/tournament";
 import { FramePanel, LoadingScreen, WallClock, formatTime, toggleFullscreen, useAdminAction, useStageScale, useTournamentState } from "../components/lcars";
+import { StandingsBoard } from "../components/standings-board";
 
-type Section = "panel" | "players" | "pairings" | "results" | "events";
+type Section = "panel" | "players" | "pairings" | "results" | "standings" | "events";
 const RESULTS = ["—", "2 · 0", "2 · 1", "1 · 0", "1 · 1", "1 · 2", "0 · 1", "0 · 2", "BYE"];
 
 export default function ControlClient() {
@@ -36,6 +37,7 @@ export default function ControlClient() {
             <NavButton label="Jugadores" code={String(activePlayers.length).padStart(2, "0")} active={section === "players"} onClick={() => setSection("players")} />
             <NavButton label="Pairings" code={String(state.matches.length).padStart(2, "0")} active={section === "pairings"} onClick={() => setSection("pairings")} />
             <NavButton label="Resultados" code={`${completed}/${state.matches.length}`} active={section === "results"} onClick={() => setSection("results")} />
+            <NavButton label="Standings" code="RANK" active={section === "standings"} onClick={() => setSection("standings")} />
             <NavButton label="Eventos" code={String(state.tournaments.length).padStart(2, "0")} active={section === "events"} onClick={() => setSection("events")} context />
           </nav>
 
@@ -45,6 +47,8 @@ export default function ControlClient() {
             <PlayersManager state={state} run={run} busy={busy} />
           ) : section === "pairings" ? (
             <PairingsManager key={`${tournament.id}-${tournament.currentRound}`} state={state} run={run} busy={busy} />
+          ) : section === "standings" ? (
+            <StandingsManager state={state} run={run} busy={busy} />
           ) : (
             <EventsManager key={tournament.id} state={state} run={run} busy={busy} />
           )}
@@ -203,6 +207,70 @@ function PairingsManager({ state, run, busy }: { state: TournamentState; run: (a
             {pairs.map((pair, index) => <div className="pairing-preview-row" key={`${pair.playerAName}-${index}`}><span>{String(index + 1).padStart(2, "0")}</span><b>{pair.playerAName}</b><i>vs</i><b>{pair.playerBName || "BYE"}</b></div>)}
             {!pairs.length && <div className="empty-state">PEGÁ O CARGÁ LOS EMPAREJAMIENTOS</div>}
           </div>
+        </div>
+      </FramePanel>
+    </div>
+  );
+}
+
+function StandingsManager({ state, run, busy }: { state: TournamentState; run: (action: string, payload: Record<string, unknown>) => Promise<TournamentState | null>; busy: boolean }) {
+  const [eventId, setEventId] = useState(state.tournament.id);
+  const [round, setRound] = useState<number | "live">("live");
+  const [snapshot, setSnapshot] = useState<StandingsSnapshot | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const selectedId = state.tournaments.some((item) => item.id === eventId) ? eventId : state.tournament.id;
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const query = new URLSearchParams({ tournamentId: selectedId });
+        if (round !== "live") query.set("round", String(round));
+        const response = await fetch(`/api/standings?${query}`, { cache: "no-store" });
+        const data = await response.json() as StandingsSnapshot & { error?: string };
+        if (!response.ok) throw new Error(data.error || "No se pudo cargar la clasificación.");
+        if (!cancelled) { setSnapshot(data); setLoadError(""); }
+      } catch (error) {
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : "No se pudo cargar la clasificación.");
+      }
+    };
+    const initial = window.setTimeout(load, 0);
+    const interval = window.setInterval(load, 4000);
+    return () => { cancelled = true; window.clearTimeout(initial); window.clearInterval(interval); };
+  }, [selectedId, round]);
+
+  const current = snapshot?.tournament.id === selectedId && (round === "live" || snapshot.roundNumber === round) ? snapshot : null;
+  const isActive = selectedId === state.tournament.id && state.tournament.status === "active";
+  const viewerShowingStandings = state.tournament.viewerScreen === "standings";
+
+  return (
+    <div className="screen-content management-content">
+      <FramePanel title="Clasificación del Torneo" refText={current?.status === "final" ? "FINAL" : current?.status === "complete" ? "COMPLETA" : "PROVISIONAL"} tone={current?.status === "final" ? "live" : "structure"} className="management-panel standings-manager">
+        <div className="standings-layout">
+          <div className="standings-toolbar">
+            <label>Evento
+              <select aria-label="Evento para clasificación" value={selectedId} onChange={(event) => { setEventId(event.target.value); setRound("live"); setSnapshot(null); setLoadError(""); }}>
+                {state.tournaments.map((event) => <option value={event.id} key={event.id}>{event.name} · {event.status === "active" ? "Activo" : "Archivado"}</option>)}
+              </select>
+            </label>
+            <label>Acumulado
+              <select aria-label="Ronda para clasificación" value={round} onChange={(event) => { setRound(event.target.value === "live" ? "live" : Number(event.target.value)); setSnapshot(null); setLoadError(""); }}>
+                <option value="live">Última ronda · en directo</option>
+                {current?.rounds.map((number) => <option value={number} key={number}>Hasta ronda {String(number).padStart(2, "0")}</option>)}
+              </select>
+            </label>
+            <div className="standings-viewer-actions">
+              <span>{!isActive ? "Consulta histórica · visor sin cambios" : round !== "live" ? "Volvé a última ronda para publicar" : "Pantalla del local"}</span>
+              <button disabled={busy || !isActive || round !== "live" || viewerShowingStandings} className={viewerShowingStandings && isActive ? "selected" : ""} onClick={() => run("set_viewer_screen", { tournamentId: selectedId, screen: "standings" })}>Mostrar standings</button>
+              <button disabled={busy || !isActive || !viewerShowingStandings} onClick={() => run("set_viewer_screen", { tournamentId: selectedId, screen: "pairings" })}>Mostrar pairings</button>
+            </div>
+          </div>
+          <div className="standings-summary">
+            <b>{current ? `${current.tournament.name} · ${current.roundNumber ? `Hasta ronda ${String(current.roundNumber).padStart(2, "0")}` : "Sin rondas"}` : "Sincronizando clasificación…"}</b>
+            <span>{loadError || (current ? current.status === "final" ? "Clasificación final" : current.status === "complete" ? "Ronda completa" : `Provisional · ${current.completedMatches}/${current.totalMatches} mesas reportadas` : "Esperando datos")}</span>
+          </div>
+          {current ? <StandingsBoard standings={current.standings} /> : <div className="empty-state">{loadError || "CARGANDO STANDINGS…"}</div>}
+          <div className="standings-legend">PTS · 3 victoria / 1 empate / 0 derrota <span>Desempates: OMW % · GW % · OGW %</span></div>
         </div>
       </FramePanel>
     </div>

@@ -22,6 +22,13 @@
       "when": 1788191578144,
       "tag": "0002_bright_squadron_sinister",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790430910335,
+      "tag": "0003_soft_jack_murdock",
+      "breakpoints": true
     }
   ]
 }

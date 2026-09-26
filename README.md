@@ -19,6 +19,7 @@ Sistema operativo para gestionar torneos TCG de hasta 14 jugadores en Mox TCG, c
 - Importación manual de pairings generados por EventLink, Bandai TCG+ u otra plataforma oficial.
 - Historial de rondas y recuperación de rondas anteriores.
 - Resultados por mesa.
+- Standings progresivos por ronda y finales por evento, incluso para torneos archivados.
 - Temporizador persistente y autoritativo: iniciar, pausar, ajustar, finalizar y reiniciar.
 - Indicador segmentado de tiempo restante.
 - Avisos publicados en el visor.
@@ -101,6 +102,12 @@ Júlia Roca | BYE
 
 La publicación reinicia y pausa el temporizador de la ronda. Después podés iniciarlo desde el panel.
 
+## Consultar standings
+
+En `/control`, abrí **Standings** para ver la clasificación acumulada en directo o hasta una ronda concreta. Elegí otro evento en el selector para consultar su historial sin activarlo ni alterar el visor. Los resultados pendientes se indican como **provisionales**; al completar todas las rondas configuradas, la tabla aparece como **final**. Los participantes con partidas previas siguen figurando aunque se desactiven o eliminen después.
+
+En el evento activo, pulsá **Mostrar standings** para sustituir los pairings en la pantalla pública. **Mostrar pairings** recupera la vista habitual. El visor siempre presenta los standings más recientes del evento activo; seleccionar una ronda histórica en la consola no modifica el visor.
+
 ## Puntuación suiza y sugerencias de pairings
 
 - Un match ganado (1 · 0, 2 · 0 o 2 · 1) vale **3 puntos**; uno empatado (1 · 1), **1 punto**; uno perdido (0 · 1, 0 · 2 o 1 · 2), **0 puntos**. Un BYE cuenta como victoria 2 · 0.
@@ -120,6 +127,7 @@ Para comenzar desde cero, cerrá el servidor y eliminá `.wrangler/`. Al volver 
 app/
   api/admin/route.ts       Operaciones administrativas protegidas
   api/state/route.ts       Estado público sincronizado
+  api/standings/route.ts   Clasificación histórica por evento y ronda
   components/lcars.tsx     Componentes y conexión del cliente
   control/                 Consola de administración
   page.tsx                 Visor público

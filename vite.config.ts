@@ -63,9 +63,12 @@ export default defineConfig(async () => {
       port: 5175,
       strictPort: true,
       allowedHosts: ["terminal.local"],
-      ...(isCodexSeatbeltSandbox
-        ? { watch: { useFsEvents: false, usePolling: true } }
-        : {}),
+      watch: {
+        // Cloudflare updates its local registry while the app runs. Watching it
+        // makes Vite send full-reload events even though no source code changed.
+        ignored: ["**/.wrangler/**", "**/.sites-runtime/**", "**/dist/**", "**/.next/**"],
+        ...(isCodexSeatbeltSandbox ? { useFsEvents: false, usePolling: true } : {}),
+      },
     },
     plugins: [
       vinext(),

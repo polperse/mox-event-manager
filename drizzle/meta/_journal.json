@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1786914769695,
+      "tag": "0000_cynical_overlord",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1787867264038,
+      "tag": "0001_pink_kitty_pryde",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788191578144,
+      "tag": "0002_bright_squadron_sinister",
+      "breakpoints": true
+    }
+  ]
+}
